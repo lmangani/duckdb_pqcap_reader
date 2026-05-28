@@ -1,0 +1,20 @@
+extension:
+  name: pqcap_reader
+  description: DuckDB reader for single-file PQCAP/PCAPNG with embedded Parquet metadata
+  version: 0.1.0
+  language: C++
+  build: cmake
+  license: MIT
+  maintainers:
+    - lmangani
+repo:
+  github: lmangani/duckdb_pqcap_reader
+  ref: 0000000000000000000000000000000000000000
+docs:
+  hello_world: |
+    INSTALL pqcap_reader FROM local;
+    LOAD pqcap_reader;
+
+    SELECT *
+    FROM read_pqcap('capture.pqcapng')
+    LIMIT 10;

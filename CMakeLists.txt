@@ -1,13 +1,28 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(pqcap_reader)
+set(TARGET_NAME pqcap_reader)
+set(EXTENSION_NAME ${TARGET_NAME}_extension)
+set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
-set(CMAKE_CXX_STANDARD 17)
+project(${TARGET_NAME})
+
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to enforce")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(pqcap_reader_extension STATIC
+include_directories(src/include src)
+
+set(EXTENSION_SOURCES
     src/pqcap_reader_extension.cpp
     src/pqcap_footer.cpp
+    src/pqcap_subfile_fs.cpp
 )
 
-target_include_directories(pqcap_reader_extension PRIVATE src)
+build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
+build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
+
+install(
+    TARGETS ${EXTENSION_NAME}
+    EXPORT "${DUCKDB_EXPORT_SET}"
+    LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
+    ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
+)

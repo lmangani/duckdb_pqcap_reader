@@ -2,6 +2,12 @@
 
 DuckDB extension workspace for reading `.pqcapng` directly.
 
+The extension structure follows the same proven pattern used by production DuckDB format readers:
+
+- custom subfile virtual filesystem for bounded byte ranges
+- scalar locator function (`pqcap_offset_size`)
+- SQL macro table function (`read_pqcap`) composed over `read_parquet(...)`
+
 ## Goal
 
 Expose a table function:
