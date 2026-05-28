@@ -11,11 +11,16 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/types/vector.hpp"
+#include "duckdb/function/replacement_scan.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/main/config.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/parser/parsed_data/create_macro_info.hpp"
 #include "duckdb/parser/statement/create_statement.hpp"
+#include "duckdb/parser/tableref/table_function_ref.hpp"
 
 #include <vector>
 
@@ -87,6 +92,32 @@ SELECT *
 FROM read_parquet('pqcap-subfile://' || pqcap_offset_size(p) || '!' || p);
 )sql";
 
+static unique_ptr<TableRef>
+PqcapReaderReplacementScan(ClientContext &context, ReplacementScanInput &input,
+                           optional_ptr<ReplacementScanData> data) {
+  auto table_name = ReplacementScan::GetFullPath(input);
+  const char *function_name = nullptr;
+  if (ReplacementScan::CanReplace(table_name, {"pqcap", "pqcapng"})) {
+    function_name = "read_pqcap";
+  } else if (ReplacementScan::CanReplace(table_name, {"pcap", "pcapng"})) {
+    function_name = "read_pqcap_packets";
+  } else {
+    return nullptr;
+  }
+
+  auto table_function = make_uniq<TableFunctionRef>();
+  vector<unique_ptr<ParsedExpression>> children;
+  children.push_back(make_uniq<ConstantExpression>(Value(table_name)));
+  table_function->function =
+      make_uniq<FunctionExpression>(function_name, std::move(children));
+
+  if (!FileSystem::HasGlob(table_name)) {
+    auto &fs = FileSystem::GetFileSystem(context);
+    table_function->alias = fs.ExtractBaseName(table_name);
+  }
+  return std::move(table_function);
+}
+
 static void LoadInternal(ExtensionLoader &loader) {
   auto &db = loader.GetDatabaseInstance();
   db.GetFileSystem().RegisterSubSystem(make_uniq<PqcapSubFileSystem>());
@@ -107,6 +138,9 @@ static void LoadInternal(ExtensionLoader &loader) {
   macro_info.schema = "main";
   macro_info.internal = true;
   loader.RegisterFunction(macro_info);
+
+  auto &config = DBConfig::GetConfig(db);
+  config.replacement_scans.emplace_back(PqcapReaderReplacementScan);
 }
 
 void PqcapReaderExtension::Load(ExtensionLoader &loader) {

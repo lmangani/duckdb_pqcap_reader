@@ -11,6 +11,11 @@ SELECT count(*) > 0 FROM read_pqcap('test/data/demo.pqcapng');
 true
 
 query I
+SELECT count(*) > 0 FROM 'test/data/demo.pqcapng';
+----
+true
+
+query I
 SELECT count(*) > 0 FROM read_pqcap_packets('test/data/demo.pqcapng');
 ----
 true
@@ -61,6 +66,11 @@ COPY (
 
 query I
 SELECT count(*) > 0 FROM read_pqcap_packets('{TEST_DIR}/pqcap_writer_copy.pcapng');
+----
+true
+
+query I
+SELECT count(*) > 0 FROM '{TEST_DIR}/pqcap_writer_copy.pcapng';
 ----
 true
 
