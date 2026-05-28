@@ -6,8 +6,8 @@
 namespace pqcap_reader {
 
 struct FooterLocator {
-    uint64_t parquet_offset;
-    uint64_t parquet_length;
+  uint64_t parquet_offset;
+  uint64_t parquet_length;
 };
 
 // Parse fixed 44-byte footer block bytes.
