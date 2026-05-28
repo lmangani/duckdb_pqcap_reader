@@ -9,3 +9,46 @@ query I
 SELECT count(*) > 0 FROM read_pqcap('test/data/demo.pqcapng');
 ----
 true
+
+query I
+SELECT count(*) > 0 FROM read_pqcap_packets('test/data/demo.pqcapng');
+----
+true
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/demo.pqcapng')
+WHERE src_ip = '127.0.0.1' AND dst_ip = '127.0.0.1' AND src_port = 1234 AND dst_port = 5678 AND l4_protocol = 'UDP';
+----
+1
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/demo.pqcapng')
+WHERE src_port = 9999 OR l4_protocol = 'TCP';
+----
+0
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/demo.pqcapng')
+WHERE timestamp_micros > 0 AND orig_len > 0;
+----
+1
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/demo.pqcapng')
+WHERE src_port IS NOT NULL AND dst_port IS NOT NULL AND payload IS NOT NULL;
+----
+1
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/demo.pqcapng')
+WHERE l4_protocol IN ('UDP', 'TCP');
+----
+1
+
+query TTTTTTTT
+SELECT typeof(timestamp_micros), typeof(src_ip), typeof(dst_ip), typeof(src_port),
+       typeof(dst_port), typeof(l4_protocol), typeof(orig_len), typeof(payload)
+FROM read_pqcap_packets('test/data/demo.pqcapng')
+LIMIT 1;
+----
+BIGINT	VARCHAR	VARCHAR	INTEGER	INTEGER	VARCHAR	UBIGINT	BLOB

@@ -2,6 +2,7 @@
 
 #include "pqcap_reader_extension.hpp"
 #include "pqcap_footer.h"
+#include "pqcap_packet_table.hpp"
 #include "pqcap_subfile_fs.hpp"
 
 #include "duckdb.hpp"
@@ -91,6 +92,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   ScalarFunction offset_size_fn("pqcap_offset_size", {LogicalType::VARCHAR},
                                 LogicalType::VARCHAR, PqcapOffsetSizeFunction);
   loader.RegisterFunction(offset_size_fn);
+  RegisterPqcapPacketTableFunction(loader);
 
   Parser parser;
   parser.ParseQuery(kReadPqcapMacro);

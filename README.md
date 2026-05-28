@@ -56,6 +56,12 @@ SELECT *
 FROM read_pqcap('capture.pqcapng');
 ```
 
+```sql
+SELECT timestamp_micros, src_ip, dst_ip, src_port, dst_port, l4_protocol, orig_len, payload
+FROM read_pqcap_packets('capture.pqcapng')
+WHERE l4_protocol = 'UDP' AND src_port = 5060;
+```
+
 Optional parameters (planned):
 
 - `gdal_vsi := true|false`

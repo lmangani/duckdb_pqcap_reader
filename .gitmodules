@@ -6,3 +6,6 @@
 	path = extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
 	branch = main
+[submodule "third_party/LightPcapNg"]
+	path = third_party/LightPcapNg
+	url = https://github.com/PcapPlusPlus/LightPcapNg
