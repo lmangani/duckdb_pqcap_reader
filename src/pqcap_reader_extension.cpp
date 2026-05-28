@@ -54,7 +54,7 @@ template <typename Body>
 static void StringScalarLoop(DataChunk &args, Vector &result, const char *fn,
                              Body body) {
   auto count = args.size();
-  args.data[0].Flatten(count);
+  args.data[0].Flatten();
   auto &src_valid = FlatVector::Validity(args.data[0]);
   result.SetVectorType(VectorType::FLAT_VECTOR);
   auto src = FlatVector::GetData<string_t>(args.data[0]);

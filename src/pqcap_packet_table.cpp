@@ -239,21 +239,21 @@ static void ReadPqcapPacketsFunction(ClientContext &context,
     }
 
     auto parsed = ParsePacket(header, packet_data);
-    output.SetValue(0, row_count, Value::BIGINT(parsed.timestamp_micros));
-    output.SetValue(1, row_count,
-                    parsed.src_ip.empty() ? Value() : Value(parsed.src_ip));
-    output.SetValue(2, row_count,
-                    parsed.dst_ip.empty() ? Value() : Value(parsed.dst_ip));
-    output.SetValue(3, row_count,
-                    parsed.has_ports ? Value::INTEGER(parsed.src_port)
-                                     : Value(LogicalType::INTEGER));
-    output.SetValue(4, row_count,
-                    parsed.has_ports ? Value::INTEGER(parsed.dst_port)
-                                     : Value(LogicalType::INTEGER));
-    output.SetValue(5, row_count, Value(parsed.l4_protocol));
-    output.SetValue(6, row_count, Value::UBIGINT(parsed.orig_len));
-    output.SetValue(
-        7, row_count,
+    output.data[0].SetValue(row_count, Value::BIGINT(parsed.timestamp_micros));
+    output.data[1].SetValue(row_count,
+                            parsed.src_ip.empty() ? Value() : Value(parsed.src_ip));
+    output.data[2].SetValue(row_count,
+                            parsed.dst_ip.empty() ? Value() : Value(parsed.dst_ip));
+    output.data[3].SetValue(row_count,
+                            parsed.has_ports ? Value::INTEGER(parsed.src_port)
+                                             : Value(LogicalType::INTEGER));
+    output.data[4].SetValue(row_count,
+                            parsed.has_ports ? Value::INTEGER(parsed.dst_port)
+                                             : Value(LogicalType::INTEGER));
+    output.data[5].SetValue(row_count, Value(parsed.l4_protocol));
+    output.data[6].SetValue(row_count, Value::UBIGINT(parsed.orig_len));
+    output.data[7].SetValue(
+        row_count,
         parsed.payload.empty()
             ? Value::BLOB_RAW("")
             : Value::BLOB(const_data_ptr_cast(parsed.payload.data()),
