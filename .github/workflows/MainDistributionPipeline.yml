@@ -17,11 +17,34 @@ jobs:
       ci_tools_version: v1.5-variegata
       extension_name: pqcap_reader
 
+  format-check:
+    name: Format Check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install formatter dependencies
+        run: |
+          sudo apt-get update -y -qq
+          sudo apt-get install -y -qq ninja-build clang-format-11
+          python3 -m pip install --user cmake-format 'black==24.*' cxxheaderparser pcpp 'clang_format==11.0.1'
+          echo "$(python3 -m site --user-base)/bin" >> "$GITHUB_PATH"
+
+      - name: Run format check
+        run: |
+          which clang-format
+          clang-format --version
+          black --version
+          make format-check
+
   code-quality-check:
-    name: Code Quality Check
+    name: Tidy Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5-variegata
     with:
       duckdb_version: v1.5.2
       ci_tools_version: v1.5-variegata
       extension_name: pqcap_reader
-      format_checks: 'format;tidy'
+      format_checks: 'tidy'
