@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-class PqcapExtension : public Extension {
+class PqcapReaderExtension : public Extension {
 public:
 	void Load(ExtensionLoader &loader) override;
 	std::string Name() override;

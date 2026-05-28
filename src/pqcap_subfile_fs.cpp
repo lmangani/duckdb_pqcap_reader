@@ -1,6 +1,7 @@
 #include "pqcap_subfile_fs.hpp"
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/file_opener.hpp"
 
 #include <stdexcept>
 

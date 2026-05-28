@@ -1,6 +1,6 @@
 #define DUCKDB_EXTENSION_MAIN
 
-#include "pqcap_extension.hpp"
+#include "pqcap_reader_extension.hpp"
 #include "pqcap_footer.h"
 #include "pqcap_subfile_fs.hpp"
 
@@ -45,18 +45,16 @@ static std::string ParsePqcapMetadataLocation(FileHandle &handle, const std::str
 template <typename Body>
 static void StringScalarLoop(DataChunk &args, Vector &result, const char *fn, Body body) {
 	auto count = args.size();
-	args.data[0].Flatten(count);
-	result.SetVectorType(VectorType::FLAT_VECTOR);
-
-	auto src = FlatVector::GetData<string_t>(args.data[0]);
-	auto dst = FlatVector::GetData<string_t>(result);
+	args.data[0].Flatten();
 	auto &src_valid = FlatVector::Validity(args.data[0]);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto src = FlatVector::GetData<string_t>(args.data[0]);
 
 	for (idx_t i = 0; i < count; i++) {
 		if (!src_valid.RowIsValid(i)) {
 			throw InvalidInputException(std::string(fn) + ": path argument is NULL");
 		}
-		dst[i] = StringVector::AddString(result, body(std::string(src[i].GetString())));
+		result.SetValue(i, Value(body(std::string(src[i].GetString()))));
 	}
 }
 
@@ -97,15 +95,15 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(macro_info);
 }
 
-void PqcapExtension::Load(ExtensionLoader &loader) {
+void PqcapReaderExtension::Load(ExtensionLoader &loader) {
 	LoadInternal(loader);
 }
 
-std::string PqcapExtension::Name() {
+std::string PqcapReaderExtension::Name() {
 	return "pqcap_reader";
 }
 
-std::string PqcapExtension::Version() const {
+std::string PqcapReaderExtension::Version() const {
 #ifdef EXT_VERSION_PQCAP_READER
 	return EXT_VERSION_PQCAP_READER;
 #else
