@@ -1,6 +1,7 @@
 #define DUCKDB_EXTENSION_MAIN
 
 #include "pqcap_reader_extension.hpp"
+#include "pqcap_copy_function.hpp"
 #include "pqcap_footer.h"
 #include "pqcap_packet_table.hpp"
 #include "pqcap_subfile_fs.hpp"
@@ -93,6 +94,7 @@ static void LoadInternal(ExtensionLoader &loader) {
                                 LogicalType::VARCHAR, PqcapOffsetSizeFunction);
   loader.RegisterFunction(offset_size_fn);
   RegisterPqcapPacketTableFunction(loader);
+  RegisterPqcapCopyFunction(loader);
 
   Parser parser;
   parser.ParseQuery(kReadPqcapMacro);

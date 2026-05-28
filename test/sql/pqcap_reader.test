@@ -52,3 +52,25 @@ FROM read_pqcap_packets('test/data/demo.pqcapng')
 LIMIT 1;
 ----
 BIGINT	VARCHAR	VARCHAR	INTEGER	INTEGER	VARCHAR	UBIGINT	BLOB
+
+statement ok
+COPY (
+  SELECT timestamp_micros, orig_len, payload, src_ip, src_port, dst_ip, dst_port, l4_protocol
+  FROM read_pqcap_packets('test/data/demo.pqcapng')
+) TO '{TEST_DIR}/pqcap_writer_copy.pcapng' (FORMAT pcapng, mode 'pcapng');
+
+query I
+SELECT count(*) > 0 FROM read_pqcap_packets('{TEST_DIR}/pqcap_writer_copy.pcapng');
+----
+true
+
+statement ok
+COPY (
+  SELECT timestamp_micros, orig_len, payload, src_ip, src_port, dst_ip, dst_port, l4_protocol
+  FROM read_pqcap_packets('test/data/demo.pqcapng')
+) TO '{TEST_DIR}/pqcap_writer_copy.pqcapng' (FORMAT pcapng, mode 'pqcap');
+
+query I
+SELECT count(*) > 0 FROM read_pqcap('{TEST_DIR}/pqcap_writer_copy.pqcapng');
+----
+true

@@ -29,6 +29,7 @@ set(LIGHT_PCAPNG_SOURCES
 
 set(EXTENSION_SOURCES
     src/pqcap_reader_extension.cpp
+    src/pqcap_copy_function.cpp
     src/pqcap_packet_table.cpp
     src/pqcap_footer.cpp
     src/pqcap_subfile_fs.cpp
@@ -40,9 +41,17 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
 target_include_directories(${EXTENSION_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/LightPcapNg/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/parquet
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/thrift
 )
 target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/LightPcapNg/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/parquet
+    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/thrift
 )
 target_compile_definitions(${EXTENSION_NAME} PRIVATE UNIVERSAL)
 target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE UNIVERSAL)
