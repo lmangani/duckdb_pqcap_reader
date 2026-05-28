@@ -1,6 +1,8 @@
-# duckdb_pqcap_reader
+<img width="300" alt="pqcap" src="https://github.com/user-attachments/assets/bcc8c286-1d67-4c5e-baa9-6e7342709879" />
 
-DuckDB extension workspace for reading `.pqcapng` directly.
+# DuckDB PQCAP Reader Extension
+
+DuckDB extension for reading the [`.pqcapng`](https://github.com/lmangani/pqcap) PCAP + Parquet hybrid file format 
 
 The extension structure follows the same proven pattern used by production DuckDB format readers:
 
