@@ -1,5 +1,6 @@
 #include "pqcap_packet_table.hpp"
 
+#include "pqcap_duckdb_compat.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string.hpp"
@@ -239,21 +240,28 @@ static void ReadPqcapPacketsFunction(ClientContext &context,
     }
 
     auto parsed = ParsePacket(header, packet_data);
-    output.data[0].SetValue(row_count, Value::BIGINT(parsed.timestamp_micros));
-    output.data[1].SetValue(row_count,
-                            parsed.src_ip.empty() ? Value() : Value(parsed.src_ip));
-    output.data[2].SetValue(row_count,
-                            parsed.dst_ip.empty() ? Value() : Value(parsed.dst_ip));
-    output.data[3].SetValue(row_count,
-                            parsed.has_ports ? Value::INTEGER(parsed.src_port)
-                                             : Value(LogicalType::INTEGER));
-    output.data[4].SetValue(row_count,
-                            parsed.has_ports ? Value::INTEGER(parsed.dst_port)
-                                             : Value(LogicalType::INTEGER));
-    output.data[5].SetValue(row_count, Value(parsed.l4_protocol));
-    output.data[6].SetValue(row_count, Value::UBIGINT(parsed.orig_len));
-    output.data[7].SetValue(
-        row_count,
+    pqcap_compat::SetChunkValue(output, 0, row_count,
+                                Value::BIGINT(parsed.timestamp_micros));
+    pqcap_compat::SetChunkValue(output, 1, row_count,
+                                parsed.src_ip.empty() ? Value()
+                                                      : Value(parsed.src_ip));
+    pqcap_compat::SetChunkValue(output, 2, row_count,
+                                parsed.dst_ip.empty() ? Value()
+                                                      : Value(parsed.dst_ip));
+    pqcap_compat::SetChunkValue(output, 3, row_count,
+                                parsed.has_ports
+                                    ? Value::INTEGER(parsed.src_port)
+                                    : Value(LogicalType::INTEGER));
+    pqcap_compat::SetChunkValue(output, 4, row_count,
+                                parsed.has_ports
+                                    ? Value::INTEGER(parsed.dst_port)
+                                    : Value(LogicalType::INTEGER));
+    pqcap_compat::SetChunkValue(output, 5, row_count,
+                                Value(parsed.l4_protocol));
+    pqcap_compat::SetChunkValue(output, 6, row_count,
+                                Value::UBIGINT(parsed.orig_len));
+    pqcap_compat::SetChunkValue(
+        output, 7, row_count,
         parsed.payload.empty()
             ? Value::BLOB_RAW("")
             : Value::BLOB(const_data_ptr_cast(parsed.payload.data()),

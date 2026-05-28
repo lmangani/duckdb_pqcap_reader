@@ -2,6 +2,7 @@
 
 #include "pqcap_reader_extension.hpp"
 #include "pqcap_copy_function.hpp"
+#include "pqcap_duckdb_compat.hpp"
 #include "pqcap_footer.h"
 #include "pqcap_packet_table.hpp"
 #include "pqcap_subfile_fs.hpp"
@@ -54,7 +55,7 @@ template <typename Body>
 static void StringScalarLoop(DataChunk &args, Vector &result, const char *fn,
                              Body body) {
   auto count = args.size();
-  args.data[0].Flatten();
+  pqcap_compat::FlattenVector(args.data[0], count);
   auto &src_valid = FlatVector::Validity(args.data[0]);
   result.SetVectorType(VectorType::FLAT_VECTOR);
   auto src = FlatVector::GetData<string_t>(args.data[0]);
