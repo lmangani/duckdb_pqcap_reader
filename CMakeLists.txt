@@ -41,17 +41,9 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
 target_include_directories(${EXTENSION_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/LightPcapNg/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/parquet
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/thrift
 )
 target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/LightPcapNg/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/extension/parquet
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/parquet
-    ${CMAKE_CURRENT_SOURCE_DIR}/duckdb/third_party/thrift
 )
 target_compile_definitions(${EXTENSION_NAME} PRIVATE UNIVERSAL)
 target_compile_definitions(${LOADABLE_EXTENSION_NAME} PRIVATE UNIVERSAL)

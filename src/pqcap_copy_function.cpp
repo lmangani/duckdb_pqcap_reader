@@ -78,8 +78,11 @@ struct PqcapCopyGlobalState : public GlobalFunctionData {
 };
 
 struct PacketLocation {
-  uint64_t offset = 0;
-  uint64_t size = 0;
+  uint64_t offset;
+  uint64_t size;
+
+  PacketLocation(uint64_t offset_p, uint64_t size_p) : offset(offset_p), size(size_p) {
+  }
 };
 
 static idx_t FindColumnIdx(const vector<string> &names, const string &needle) {
