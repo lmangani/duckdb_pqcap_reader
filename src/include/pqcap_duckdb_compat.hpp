@@ -3,6 +3,20 @@
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/types/vector.hpp"
 
+#if defined(__has_include)
+#if __has_include("duckdb/common/vector/flat_vector.hpp")
+#include "duckdb/common/vector/flat_vector.hpp"
+#define PQCAP_DUCKDB_HAS_FLAT_VECTOR_HPP 1
+#endif
+#if __has_include("duckdb/common/vector/string_vector.hpp")
+#include "duckdb/common/vector/string_vector.hpp"
+#endif
+#endif
+
+#ifndef PQCAP_DUCKDB_HAS_FLAT_VECTOR_HPP
+#define PQCAP_DUCKDB_HAS_FLAT_VECTOR_HPP 0
+#endif
+
 namespace duckdb {
 namespace pqcap_compat {
 
@@ -41,6 +55,15 @@ inline void FlattenVector(Vector &vector, idx_t count) {
 inline void SetChunkValue(DataChunk &chunk, idx_t col_idx, idx_t row_idx,
                           const Value &val) {
   detail::SetChunkValueImpl(chunk, col_idx, row_idx, val, nullptr);
+}
+
+template <class T>
+inline T *FlatVectorGetData(Vector &vector) {
+#if PQCAP_DUCKDB_HAS_FLAT_VECTOR_HPP
+  return FlatVector::GetDataMutable<T>(vector);
+#else
+  return FlatVector::GetData<T>(vector);
+#endif
 }
 
 } // namespace pqcap_compat

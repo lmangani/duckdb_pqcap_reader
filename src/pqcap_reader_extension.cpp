@@ -10,7 +10,6 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/common/types/vector.hpp"
 #include "duckdb/function/replacement_scan.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/config.hpp"
@@ -63,7 +62,7 @@ static void StringScalarLoop(DataChunk &args, Vector &result, const char *fn,
   pqcap_compat::FlattenVector(args.data[0], count);
   auto &src_valid = FlatVector::Validity(args.data[0]);
   result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto src = FlatVector::GetData<string_t>(args.data[0]);
+  auto src = pqcap_compat::FlatVectorGetData<string_t>(args.data[0]);
 
   for (idx_t i = 0; i < count; i++) {
     if (!src_valid.RowIsValid(i)) {

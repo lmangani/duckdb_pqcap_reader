@@ -8,9 +8,6 @@
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "duckdb/common/vector.hpp"
-#include "duckdb/common/vector/flat_vector.hpp"
-#include "duckdb/common/vector/string_vector.hpp"
 #include "duckdb/function/table_function.hpp"
 
 extern "C" {
@@ -395,7 +392,7 @@ static void SetPayloadValue(DataChunk &output, idx_t row, const uint8_t *data,
   }
   auto blob = StringVector::AddStringOrBlob(payload_vec,
                                             const_char_ptr_cast(data), len);
-  FlatVector::GetDataMutable<string_t>(payload_vec)[row] = blob;
+  pqcap_compat::FlatVectorGetData<string_t>(payload_vec)[row] = blob;
   FlatVector::SetNull(payload_vec, row, false);
 }
 

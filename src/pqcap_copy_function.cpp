@@ -6,7 +6,6 @@
 #include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/common/vector/flat_vector.hpp"
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -678,7 +677,7 @@ static void PqcapEmbedIndexFunction(DataChunk &args, ExpressionState &state,
   pqcap_compat::FlattenVector(args.data[0], count);
   auto &src_valid = FlatVector::Validity(args.data[0]);
   result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto src = FlatVector::GetData<string_t>(args.data[0]);
+  auto src = pqcap_compat::FlatVectorGetData<string_t>(args.data[0]);
 
   for (idx_t i = 0; i < count; i++) {
     if (!src_valid.RowIsValid(i)) {
