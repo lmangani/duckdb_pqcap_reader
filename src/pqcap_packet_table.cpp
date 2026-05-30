@@ -523,7 +523,7 @@ static void ReadPqcapPacketsFunction(ClientContext &context,
     SetRowValue(output, 3, row_count, Value::UBIGINT(header.captured_length));
     SetRowValue(output, 4, row_count, Value::UBIGINT(header.original_length));
     SetRowValue(output, 5, row_count,
-                comment.empty() ? Value() : Value(comment));
+                comment.empty() ? Value(LogicalType::VARCHAR) : Value(comment));
     SetRowValue(output, 6, row_count,
                 parsed.src_ip.empty() ? Value() : Value(parsed.src_ip));
     SetRowValue(output, 7, row_count,
