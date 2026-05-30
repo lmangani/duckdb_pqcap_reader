@@ -57,8 +57,7 @@ inline void SetChunkValue(DataChunk &chunk, idx_t col_idx, idx_t row_idx,
   detail::SetChunkValueImpl(chunk, col_idx, row_idx, val, nullptr);
 }
 
-template <class T>
-inline T *FlatVectorGetData(Vector &vector) {
+template <class T> inline T *FlatVectorGetData(Vector &vector) {
 #if PQCAP_DUCKDB_HAS_FLAT_VECTOR_HPP
   return FlatVector::GetDataMutable<T>(vector);
 #else

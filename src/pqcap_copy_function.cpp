@@ -684,7 +684,8 @@ static void PqcapEmbedIndexFunction(DataChunk &args, ExpressionState &state,
       throw InvalidInputException("pqcap_embed_index(path): path is NULL");
     }
     const auto path = std::string(src[i].GetString());
-    result.SetValue(i, Value::BIGINT(EmbedPqcapIndex(state.GetContext(), path)));
+    result.SetValue(i,
+                    Value::BIGINT(EmbedPqcapIndex(state.GetContext(), path)));
   }
 }
 
