@@ -379,21 +379,16 @@ static int64_t TimestampMicros(const light_packet_header &header) {
 
 static void SetRowValue(DataChunk &output, idx_t col, idx_t row,
                         const Value &val) {
-  pqcap_compat::SetChunkValue(output, col, row, val);
+  output.data[col].SetValue(row, val);
 }
 
 static void SetPayloadValue(DataChunk &output, idx_t row, const uint8_t *data,
                             idx_t len) {
-  auto &payload_vec = output.data[11];
-  pqcap_compat::FlattenVector(payload_vec, row + 1);
   if (data == nullptr || len == 0) {
-    FlatVector::SetNull(payload_vec, row, true);
+    SetRowValue(output, 11, row, Value(LogicalType::BLOB));
     return;
   }
-  auto blob = StringVector::AddStringOrBlob(payload_vec,
-                                            const_char_ptr_cast(data), len);
-  pqcap_compat::FlatVectorGetData<string_t>(payload_vec)[row] = blob;
-  FlatVector::SetNull(payload_vec, row, false);
+  SetRowValue(output, 11, row, Value::BLOB(data, len));
 }
 
 } // namespace
@@ -525,9 +520,11 @@ static void ReadPqcapPacketsFunction(ClientContext &context,
     SetRowValue(output, 5, row_count,
                 comment.empty() ? Value(LogicalType::VARCHAR) : Value(comment));
     SetRowValue(output, 6, row_count,
-                parsed.src_ip.empty() ? Value() : Value(parsed.src_ip));
+                parsed.src_ip.empty() ? Value(LogicalType::VARCHAR)
+                                      : Value(parsed.src_ip));
     SetRowValue(output, 7, row_count,
-                parsed.dst_ip.empty() ? Value() : Value(parsed.dst_ip));
+                parsed.dst_ip.empty() ? Value(LogicalType::VARCHAR)
+                                      : Value(parsed.dst_ip));
     SetRowValue(output, 8, row_count,
                 parsed.has_ports ? Value::INTEGER(parsed.src_port)
                                  : Value(LogicalType::INTEGER));
@@ -536,6 +533,9 @@ static void ReadPqcapPacketsFunction(ClientContext &context,
                                  : Value(LogicalType::INTEGER));
     SetRowValue(output, 10, row_count, Value(parsed.l4_protocol));
     SetPayloadValue(output, row_count, packet_ptr, packet_bytes.size());
+  }
+  for (idx_t col = 0; col < output.ColumnCount(); col++) {
+    pqcap_compat::FlattenVector(output.data[col], row_count);
   }
   output.SetCardinality(row_count);
 }

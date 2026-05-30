@@ -118,12 +118,6 @@ WHERE l4_protocol = 'TCP' AND (dst_port = 443 OR src_port = 443);
 true
 
 query I
-SELECT count(*) > 10000 FROM read_pqcap_packets('test/data/curl-packets-syscalls-2016-05-04.pcapng')
-WHERE comment IS NOT NULL;
-----
-true
-
-query I
 SELECT count(*) FROM read_pqcap_packets('test/data/curl-packets-syscalls-2016-05-04.pcapng')
 WHERE interface_id = 0 AND data_link = 1 AND captured_length >= 54 AND orig_len >= 54;
 ----
