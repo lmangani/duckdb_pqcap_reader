@@ -1,13 +1,18 @@
 #include "pqcap_copy_function.hpp"
 
+#include "pqcap_duckdb_compat.hpp"
+#include "pqcap_footer.h"
 #include "duckdb.hpp"
 #include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/vector/flat_vector.hpp"
 #include "duckdb/function/copy_function.hpp"
+#include "duckdb/function/scalar_function.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/connection.hpp"
 #include "duckdb/main/database.hpp"
+#include "duckdb/main/materialized_query_result.hpp"
 
 extern "C" {
 #include "light_pcapng_ext.h"
@@ -27,10 +32,15 @@ static const uint32_t PQCAP_FOOTER_BLOCK_TYPE = 0x00000BEE;
 static const uint32_t PQCAP_ENTERPRISE_ID = 0x51584950;
 static const char PQCAP_MAGIC[] = "PQCAPMETA";
 static const char PQCAP_FOOTER_MAGIC[] = "PQCAPFTR";
+static constexpr idx_t PQCAP_FOOTER_BLOCK_SIZE = 44;
 
 struct PacketRowData {
   uint64_t ts_micros = 0;
   uint64_t orig_len = 0;
+  uint64_t captured_length = 0;
+  uint64_t interface_id = 0;
+  uint16_t data_link = 0;
+  std::string comment;
   std::string packet_bytes;
   std::string src_ip;
   std::string dst_ip;
@@ -48,6 +58,10 @@ struct PqcapCopyBindData : public FunctionData {
   idx_t idx_timestamp_micros = DConstants::INVALID_INDEX;
   idx_t idx_orig_len = DConstants::INVALID_INDEX;
   idx_t idx_payload = DConstants::INVALID_INDEX;
+  idx_t idx_interface_id = DConstants::INVALID_INDEX;
+  idx_t idx_data_link = DConstants::INVALID_INDEX;
+  idx_t idx_captured_length = DConstants::INVALID_INDEX;
+  idx_t idx_comment = DConstants::INVALID_INDEX;
   idx_t idx_src_ip = DConstants::INVALID_INDEX;
   idx_t idx_dst_ip = DConstants::INVALID_INDEX;
   idx_t idx_src_port = DConstants::INVALID_INDEX;
@@ -62,7 +76,11 @@ struct PqcapCopyBindData : public FunctionData {
     return mode == other.mode && linktype == other.linktype &&
            idx_timestamp_micros == other.idx_timestamp_micros &&
            idx_orig_len == other.idx_orig_len &&
-           idx_payload == other.idx_payload && idx_src_ip == other.idx_src_ip &&
+           idx_payload == other.idx_payload &&
+           idx_interface_id == other.idx_interface_id &&
+           idx_data_link == other.idx_data_link &&
+           idx_captured_length == other.idx_captured_length &&
+           idx_comment == other.idx_comment && idx_src_ip == other.idx_src_ip &&
            idx_dst_ip == other.idx_dst_ip &&
            idx_src_port == other.idx_src_port &&
            idx_dst_port == other.idx_dst_port &&
@@ -145,6 +163,10 @@ PcapngWriteBind(ClientContext &context, CopyFunctionBindInput &input,
   bind_data->idx_timestamp_micros = FindColumnIdx(names, "timestamp_micros");
   bind_data->idx_orig_len = FindColumnIdx(names, "orig_len");
   bind_data->idx_payload = FindColumnIdx(names, "payload");
+  bind_data->idx_interface_id = FindColumnIdx(names, "interface_id");
+  bind_data->idx_data_link = FindColumnIdx(names, "data_link");
+  bind_data->idx_captured_length = FindColumnIdx(names, "captured_length");
+  bind_data->idx_comment = FindColumnIdx(names, "comment");
   bind_data->idx_src_ip = FindColumnIdx(names, "src_ip");
   bind_data->idx_dst_ip = FindColumnIdx(names, "dst_ip");
   bind_data->idx_src_port = FindColumnIdx(names, "src_port");
@@ -211,6 +233,32 @@ static void PcapngWriteSink(ExecutionContext &context, FunctionData &bind_data,
       throw IOException("payload cannot be NULL");
     }
     row.packet_bytes = payload.GetValue<string>();
+    row.captured_length = static_cast<uint64_t>(row.packet_bytes.size());
+
+    if (cfg.idx_interface_id != DConstants::INVALID_INDEX) {
+      Value v = input.GetValue(cfg.idx_interface_id, r);
+      if (!v.IsNull()) {
+        row.interface_id = ParseUInt64(v, "interface_id");
+      }
+    }
+    if (cfg.idx_data_link != DConstants::INVALID_INDEX) {
+      Value v = input.GetValue(cfg.idx_data_link, r);
+      if (!v.IsNull()) {
+        row.data_link = static_cast<uint16_t>(ParseUInt64(v, "data_link"));
+      }
+    }
+    if (cfg.idx_captured_length != DConstants::INVALID_INDEX) {
+      Value v = input.GetValue(cfg.idx_captured_length, r);
+      if (!v.IsNull()) {
+        row.captured_length = ParseUInt64(v, "captured_length");
+      }
+    }
+    if (cfg.idx_comment != DConstants::INVALID_INDEX) {
+      Value v = input.GetValue(cfg.idx_comment, r);
+      if (!v.IsNull()) {
+        row.comment = v.GetValue<string>();
+      }
+    }
 
     if (cfg.idx_src_ip != DConstants::INVALID_INDEX) {
       Value v = input.GetValue(cfg.idx_src_ip, r);
@@ -247,8 +295,8 @@ static void PcapngWriteSink(ExecutionContext &context, FunctionData &bind_data,
 
     light_packet_header hdr;
     memset(&hdr, 0, sizeof(hdr));
-    hdr.interface_id = 0;
-    hdr.data_link = cfg.linktype;
+    hdr.interface_id = static_cast<uint32_t>(row.interface_id);
+    hdr.data_link = row.data_link != 0 ? row.data_link : cfg.linktype;
     hdr.captured_length = static_cast<uint32_t>(row.packet_bytes.size());
     hdr.original_length = static_cast<uint32_t>(row.orig_len);
     hdr.timestamp.tv_sec = static_cast<time_t>(row.ts_micros / 1000000ULL);
@@ -270,6 +318,21 @@ static uint32_t ReadLE32(const uint8_t *ptr) {
   return static_cast<uint32_t>(ptr[0]) | (static_cast<uint32_t>(ptr[1]) << 8) |
          (static_cast<uint32_t>(ptr[2]) << 16) |
          (static_cast<uint32_t>(ptr[3]) << 24);
+}
+
+static string ResolveCapturePath(FileSystem &fs, const string &output_path) {
+  if (fs.FileExists(output_path)) {
+    return output_path;
+  }
+  const auto path = StringUtil::GetFilePath(output_path);
+  const auto base = StringUtil::GetFileName(output_path);
+  if (StringUtil::StartsWith(base, "tmp_")) {
+    const string final_path = fs.JoinPath(path, base.substr(4));
+    if (fs.FileExists(final_path)) {
+      return final_path;
+    }
+  }
+  return output_path;
 }
 
 static std::vector<PacketLocation>
@@ -317,7 +380,7 @@ static string SqlEscape(const string &s) {
 static void WriteMetadataParquetViaSQL(const string &parquet_path,
                                        const std::vector<PacketRowData> &rows,
                                        const std::vector<PacketLocation> &locs,
-                                       uint16_t linktype) {
+                                       uint16_t default_linktype) {
   if (rows.size() != locs.size()) {
     throw IOException(
         "pqcap writer mismatch between packet rows and written packet blocks");
@@ -331,11 +394,14 @@ static void WriteMetadataParquetViaSQL(const string &parquet_path,
     throw IOException("Failed loading parquet extension in temp writer DB: %s",
                       res->GetError());
   }
-  res = con.Query("CREATE TEMP TABLE " + table_name +
-                  "(frame_number UBIGINT, ts_ns UBIGINT, protocols "
-                  "VARCHAR, src_ip VARCHAR, src_port UINTEGER, "
-                  "dst_ip VARCHAR, dst_port UINTEGER, \"offset\" UBIGINT, "
-                  "\"size\" UBIGINT, linktype UINTEGER)");
+  res = con.Query(
+      "CREATE TEMP TABLE " + table_name +
+      "(frame_number UBIGINT, ts_ns UBIGINT, protocols "
+      "VARCHAR, src_ip VARCHAR, src_port UINTEGER, "
+      "dst_ip VARCHAR, dst_port UINTEGER, interface_id UBIGINT, "
+      "data_link USMALLINT, captured_length UBIGINT, orig_len UBIGINT, "
+      "comment VARCHAR, \"offset\" UBIGINT, "
+      "\"size\" UBIGINT, linktype USMALLINT)");
   if (res->HasError()) {
     throw IOException("Failed creating temp metadata table: %s",
                       res->GetError());
@@ -343,6 +409,8 @@ static void WriteMetadataParquetViaSQL(const string &parquet_path,
   if (!rows.empty()) {
     string insert_sql = "INSERT INTO " + table_name + " VALUES ";
     for (idx_t i = 0; i < rows.size(); i++) {
+      const auto linktype =
+          rows[i].data_link != 0 ? rows[i].data_link : default_linktype;
       if (i > 0) {
         insert_sql += ",";
       }
@@ -364,6 +432,16 @@ static void WriteMetadataParquetViaSQL(const string &parquet_path,
       insert_sql += ",";
       insert_sql +=
           rows[i].has_dst_port ? std::to_string(rows[i].dst_port) : "NULL";
+      insert_sql += ",";
+      insert_sql += std::to_string(rows[i].interface_id) + ",";
+      insert_sql += std::to_string(static_cast<uint32_t>(linktype)) + ",";
+      const auto captured =
+          rows[i].captured_length != 0 ? rows[i].captured_length : locs[i].size;
+      insert_sql += std::to_string(captured) + ",";
+      insert_sql += std::to_string(rows[i].orig_len) + ",";
+      insert_sql += rows[i].comment.empty()
+                        ? "NULL"
+                        : "'" + SqlEscape(rows[i].comment) + "'";
       insert_sql += ",";
       insert_sql += std::to_string(locs[i].offset) + "," +
                     std::to_string(locs[i].size) + "," +
@@ -480,6 +558,137 @@ static void EmbedParquetInPqcap(const string &pcap_path,
   WriteFileBytes(pcap_path, capture);
 }
 
+static void EnsurePlainCapture(FileSystem &fs, const string &path) {
+  auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
+  if (!handle) {
+    throw IOException("pqcap_embed_index: could not open %s", path);
+  }
+  const auto file_size = static_cast<idx_t>(handle->GetFileSize());
+  if (file_size < PQCAP_FOOTER_BLOCK_SIZE) {
+    return;
+  }
+  std::vector<char> tail(PQCAP_FOOTER_BLOCK_SIZE);
+  handle->Read(tail.data(), PQCAP_FOOTER_BLOCK_SIZE,
+               file_size - PQCAP_FOOTER_BLOCK_SIZE);
+  pqcap_reader::FooterLocator loc;
+  if (pqcap_reader::ParseFooterLocator(std::string(tail.data(), tail.size()),
+                                       loc)) {
+    throw InvalidInputException(
+        "pqcap_embed_index: capture already contains pqcap metadata: %s", path);
+  }
+}
+
+static std::vector<PacketRowData>
+FetchPacketFeaturesFromCapture(Connection &con, const string &path) {
+  const string sql =
+      "SELECT timestamp_micros, interface_id, data_link, captured_length, "
+      "orig_len, comment, src_ip, src_port, dst_ip, dst_port, l4_protocol "
+      "FROM read_pqcap_packets('" +
+      SqlEscape(path) + "')";
+  auto result = con.Query(sql);
+  if (result->HasError()) {
+    throw IOException("pqcap_embed_index: failed reading capture features: %s",
+                      result->GetError());
+  }
+  auto &materialized = result->Cast<MaterializedQueryResult>();
+  std::vector<PacketRowData> rows;
+  rows.reserve(materialized.RowCount());
+  for (idx_t r = 0; r < materialized.RowCount(); r++) {
+    PacketRowData row;
+    row.ts_micros = materialized.GetValue(0, r)
+                        .DefaultCastAs(LogicalType::BIGINT)
+                        .GetValue<int64_t>();
+    if (!materialized.GetValue(1, r).IsNull()) {
+      row.interface_id = materialized.GetValue(1, r)
+                             .DefaultCastAs(LogicalType::UBIGINT)
+                             .GetValue<uint64_t>();
+    }
+    if (!materialized.GetValue(2, r).IsNull()) {
+      row.data_link =
+          static_cast<uint16_t>(materialized.GetValue(2, r)
+                                    .DefaultCastAs(LogicalType::USMALLINT)
+                                    .GetValue<uint16_t>());
+    }
+    if (!materialized.GetValue(3, r).IsNull()) {
+      row.captured_length = materialized.GetValue(3, r)
+                                .DefaultCastAs(LogicalType::UBIGINT)
+                                .GetValue<uint64_t>();
+    }
+    row.orig_len = materialized.GetValue(4, r)
+                       .DefaultCastAs(LogicalType::UBIGINT)
+                       .GetValue<uint64_t>();
+    if (!materialized.GetValue(5, r).IsNull()) {
+      row.comment = materialized.GetValue(5, r).GetValue<string>();
+    }
+    if (!materialized.GetValue(6, r).IsNull()) {
+      row.src_ip = materialized.GetValue(6, r).GetValue<string>();
+    }
+    if (!materialized.GetValue(7, r).IsNull()) {
+      row.src_port =
+          static_cast<uint32_t>(materialized.GetValue(7, r)
+                                    .DefaultCastAs(LogicalType::INTEGER)
+                                    .GetValue<int32_t>());
+      row.has_src_port = true;
+    }
+    if (!materialized.GetValue(8, r).IsNull()) {
+      row.dst_ip = materialized.GetValue(8, r).GetValue<string>();
+    }
+    if (!materialized.GetValue(9, r).IsNull()) {
+      row.dst_port =
+          static_cast<uint32_t>(materialized.GetValue(9, r)
+                                    .DefaultCastAs(LogicalType::INTEGER)
+                                    .GetValue<int32_t>());
+      row.has_dst_port = true;
+    }
+    if (!materialized.GetValue(10, r).IsNull()) {
+      row.protocols =
+          StringUtil::Lower(materialized.GetValue(10, r).GetValue<string>());
+    }
+    rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
+static int64_t EmbedPqcapIndex(ClientContext &context, const string &path_in) {
+  auto &fs = FileSystem::GetFileSystem(context);
+  const string path = fs.ExpandPath(path_in);
+  EnsurePlainCapture(fs, path);
+  Connection con(*context.db);
+  auto rows = FetchPacketFeaturesFromCapture(con, path);
+  auto locations = ScanPacketLocations(path);
+  if (rows.size() != locations.size()) {
+    throw IOException(
+        "pqcap_embed_index: packet count mismatch (features=%llu blocks=%llu) "
+        "in %s",
+        rows.size(), locations.size(), path);
+  }
+  const string temp_parquet = path + ".tmp.meta.parquet";
+  const uint16_t default_linktype = (!rows.empty() && rows[0].data_link != 0)
+                                        ? rows[0].data_link
+                                        : static_cast<uint16_t>(1);
+  WriteMetadataParquetViaSQL(temp_parquet, rows, locations, default_linktype);
+  EmbedParquetInPqcap(path, temp_parquet);
+  std::remove(temp_parquet.c_str());
+  return static_cast<int64_t>(rows.size());
+}
+
+static void PqcapEmbedIndexFunction(DataChunk &args, ExpressionState &state,
+                                    Vector &result) {
+  auto count = args.size();
+  pqcap_compat::FlattenVector(args.data[0], count);
+  auto &src_valid = FlatVector::Validity(args.data[0]);
+  result.SetVectorType(VectorType::FLAT_VECTOR);
+  auto src = FlatVector::GetData<string_t>(args.data[0]);
+
+  for (idx_t i = 0; i < count; i++) {
+    if (!src_valid.RowIsValid(i)) {
+      throw InvalidInputException("pqcap_embed_index(path): path is NULL");
+    }
+    const auto path = std::string(src[i].GetString());
+    result.SetValue(i, Value::BIGINT(EmbedPqcapIndex(state.GetContext(), path)));
+  }
+}
+
 static void PcapngWriteFinalize(ClientContext &context, FunctionData &bind_data,
                                 GlobalFunctionData &gstate) {
   auto &cfg = bind_data.Cast<PqcapCopyBindData>();
@@ -492,10 +701,12 @@ static void PcapngWriteFinalize(ClientContext &context, FunctionData &bind_data,
   if (cfg.mode != "pqcap") {
     return;
   }
-  auto locations = ScanPacketLocations(state.output_path);
-  const string temp_parquet = state.output_path + ".tmp.meta.parquet";
+  auto &fs = FileSystem::GetFileSystem(context);
+  const string capture_path = ResolveCapturePath(fs, state.output_path);
+  auto locations = ScanPacketLocations(capture_path);
+  const string temp_parquet = capture_path + ".tmp.meta.parquet";
   WriteMetadataParquetViaSQL(temp_parquet, state.rows, locations, cfg.linktype);
-  EmbedParquetInPqcap(state.output_path, temp_parquet);
+  EmbedParquetInPqcap(capture_path, temp_parquet);
   std::remove(temp_parquet.c_str());
 }
 
@@ -512,6 +723,10 @@ void RegisterPqcapCopyFunction(ExtensionLoader &loader) {
   function.copy_to_finalize = PcapngWriteFinalize;
   function.extension = "pcapng";
   loader.RegisterFunction(function);
+
+  ScalarFunction embed_index_fn("pqcap_embed_index", {LogicalType::VARCHAR},
+                                LogicalType::BIGINT, PqcapEmbedIndexFunction);
+  loader.RegisterFunction(embed_index_fn);
 }
 
 } // namespace duckdb

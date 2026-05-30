@@ -7,7 +7,7 @@ DuckDB extension for the [pqcap](https://github.com/sipcapture/pqcap) hybrid cap
 ## Features
 
 - **Metadata plane** — `read_pqcap(path)` reads embedded Parquet via a footer locator and `pqcap-subfile://` range reads (local files today; object-store friendly layout).
-- **Packet plane** — `read_pqcap_packets(path)` decodes PCAP-NG records (IPs, ports, L4 protocol, payload blob) with LightPcapNg.
+- **Packet plane** — `read_pqcap_packets(path)` reads **classic `.pcap` and `.pcapng`** via LightPcapNg (plus a native classic PCAP reader), exposing capture headers and full frame bytes as `payload` BLOB.
 - **Path shorthand** — DuckDB [replacement scans](https://duckdb.org/docs/stable/clients/cli/overview.html) route quoted paths by suffix (extension must be loaded):
 
   | Suffix | Reader |
@@ -15,9 +15,10 @@ DuckDB extension for the [pqcap](https://github.com/sipcapture/pqcap) hybrid cap
   | `.pqcap`, `.pqcapng` | `read_pqcap` (metadata) |
   | `.pcap`, `.pcapng` | `read_pqcap_packets` (packets) |
 
-- **Writer** — `COPY ... TO 'out.pcapng' (FORMAT pcapng, mode 'pcapng' \| 'pqcap')` for packet-only or pqcap bundles with embedded metadata.
+- **Writer** — `COPY ... (FORMAT pcapng)` with `mode 'pcapng'` (packets only) or `mode 'pqcap'` (packets + index).
+- **Indexer** — `pqcap_embed_index(path)` embeds searchable metadata on an existing capture (no payload round-trip; used by `pqcap convert`).
 
-Internals follow the same pattern as production DuckDB format readers:
+Internals:
 
 - `PqcapSubFileSystem` for bounded byte-range reads
 - `pqcap_offset_size(path)` scalar locator
@@ -39,32 +40,48 @@ For local development builds, load the artifact from `build/release/extension/pq
 
 ### Metadata (Parquet plane)
 
+Embedded Parquet holds **search features only** — not packet payloads.
+
 ```sql
-SELECT *
+SELECT frame_number, protocols, src_ip, dst_port, "offset", "size"
 FROM read_pqcap('capture.pqcapng');
 ```
 
-Shorthand (same as above when `pqcap_reader` is loaded):
+Shorthand:
 
 ```sql
-SELECT *
-FROM 'capture.pqcapng';
+SELECT * FROM 'capture.pqcapng';
 ```
 
-### Packets (PCAP-NG plane)
+Reference optional columns: `frame_number`, `protocols`, `src_ip`, `dst_ip`, `src_port`, `dst_port`, `interface_id`, `data_link`, `captured_length`, `orig_len`, `comment` (plus required `offset`, `size`, `ts_ns`, `linktype`).
+
+### Packets (capture plane)
 
 ```sql
-SELECT timestamp_micros, src_ip, dst_ip, src_port, dst_port, l4_protocol, orig_len, payload
-FROM read_pqcap_packets('capture.pqcapng')
+SELECT timestamp_micros, interface_id, data_link, captured_length, orig_len, comment,
+       src_ip, dst_ip, src_port, dst_port, l4_protocol, payload
+FROM read_pqcap_packets('capture.pcapng')
 WHERE l4_protocol = 'UDP' AND src_port = 5060;
 ```
 
-Shorthand for standard capture suffixes:
+Shorthand:
 
 ```sql
-SELECT *
-FROM 'capture.pcapng'
-WHERE l4_protocol = 'UDP';
+SELECT * FROM 'capture.pcapng' WHERE l4_protocol = 'UDP';
+```
+
+### Cross-plane (filter index, read payloads)
+
+```sql
+WITH hits AS (
+  SELECT src_ip, src_port, dst_ip, dst_port
+  FROM read_pqcap('capture.pqcapng')
+  WHERE dst_port = 443
+)
+SELECT p.timestamp_micros, p.payload
+FROM read_pqcap_packets('capture.pqcapng') AS p
+JOIN hits USING (src_ip, src_port, dst_ip, dst_port)
+LIMIT 10;
 ```
 
 ### Write captures
@@ -78,13 +95,20 @@ COPY (
 ) TO 'out.pcapng' (FORMAT pcapng, mode 'pcapng');
 ```
 
-PQCAP bundle (packets + embedded metadata):
+PQCAP bundle (repack + index — `payload` required for EPB write; Parquet stores features only):
 
 ```sql
 COPY (
-  SELECT timestamp_micros, orig_len, payload, src_ip, src_port, dst_ip, dst_port, l4_protocol
+  SELECT timestamp_micros, interface_id, data_link, captured_length, orig_len, comment,
+         src_ip, src_port, dst_ip, dst_port, l4_protocol, payload
   FROM read_pqcap_packets('in.pqcapng')
 ) TO 'out.pqcapng' (FORMAT pcapng, mode 'pqcap');
+```
+
+Index an existing capture in place (`pqcap convert` uses this):
+
+```sql
+SELECT pqcap_embed_index('capture.pcapng');  -- returns packet count
 ```
 
 ## Repository layout
@@ -95,6 +119,7 @@ This repo follows the [DuckDB extension template](https://github.com/duckdb/exte
 - `extension-ci-tools` submodule
 - `Makefile`, `extension_config.cmake`, `description.yml`
 - SQL tests under `test/sql`
+- Sample captures under `test/data/`
 
 Initialize submodules:
 
@@ -106,11 +131,6 @@ git submodule update --init --recursive
 
 ```bash
 make release
-```
-
-Run extension SQL tests (preferred — avoids the full DuckDB `unittest` matrix):
-
-```bash
 ./build/release/test/unittest test/sql/pqcap_reader.test
 ```
 
@@ -121,9 +141,9 @@ Interactive shell:
 ```
 
 ```sql
-LOAD pqcap_reader;  -- omit when extension is statically linked into your build
+LOAD pqcap_reader;
 SELECT * FROM 'test/data/demo.pqcapng';
-SELECT * FROM read_pqcap_packets('test/data/demo.pqcapng') WHERE l4_protocol = 'UDP';
+SELECT count(*) FROM read_pqcap_packets('test/data/aaa.pcap') WHERE l4_protocol = 'UDP';
 ```
 
 ## Related

@@ -1,4 +1,5 @@
 build/
 .tmp/
+duckdb_unittest_tempdir/
 .DS_Store
 .cache/

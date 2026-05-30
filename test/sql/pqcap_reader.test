@@ -40,7 +40,8 @@ WHERE timestamp_micros > 0 AND orig_len > 0;
 
 query I
 SELECT count(*) FROM read_pqcap_packets('test/data/demo.pqcapng')
-WHERE src_port IS NOT NULL AND dst_port IS NOT NULL AND payload IS NOT NULL;
+WHERE src_port IS NOT NULL AND dst_port IS NOT NULL AND captured_length > 0
+  AND payload IS NOT NULL;
 ----
 1
 
@@ -50,17 +51,88 @@ WHERE l4_protocol IN ('UDP', 'TCP');
 ----
 1
 
-query TTTTTTTT
-SELECT typeof(timestamp_micros), typeof(src_ip), typeof(dst_ip), typeof(src_port),
-       typeof(dst_port), typeof(l4_protocol), typeof(orig_len), typeof(payload)
+query TTTTTTTTTTTT
+SELECT typeof(timestamp_micros), typeof(interface_id), typeof(data_link),
+       typeof(captured_length), typeof(orig_len), typeof(comment), typeof(src_ip),
+       typeof(dst_ip), typeof(src_port), typeof(dst_port), typeof(l4_protocol),
+       typeof(payload)
 FROM read_pqcap_packets('test/data/demo.pqcapng')
 LIMIT 1;
 ----
-BIGINT	VARCHAR	VARCHAR	INTEGER	INTEGER	VARCHAR	UBIGINT	BLOB
+BIGINT	UBIGINT	USMALLINT	UBIGINT	UBIGINT	VARCHAR	VARCHAR	VARCHAR	INTEGER	INTEGER	VARCHAR	BLOB
+
+query I
+SELECT count(*) > 30 FROM read_pqcap_packets('test/data/DTMFsipinfo.pcap');
+----
+true
+
+query I
+SELECT count(*) > 30 AND max(captured_length) > 100 FROM read_pqcap_packets('test/data/DTMFsipinfo.pcap');
+----
+true
+
+query I
+SELECT count(*) > 0 FROM read_pqcap_packets('test/data/DTMFsipinfo.pcap')
+WHERE comment IS NOT NULL;
+----
+true
+
+query I
+SELECT count(*) > 600 FROM read_pqcap_packets('test/data/aaa.pcap');
+----
+true
+
+query I
+SELECT count(*) > 50 FROM read_pqcap_packets('test/data/aaa.pcap')
+WHERE l4_protocol = 'UDP' AND (dst_port = 5060 OR src_port = 5060);
+----
+true
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/aaa.pcap')
+WHERE l4_protocol = 'ETH_0x0806';
+----
+44
+
+query I
+SELECT count(*) > 0 FROM read_pqcap_packets('test/data/aaa.pcap')
+WHERE l4_protocol = 'UDP' AND src_ip IS NOT NULL AND dst_ip IS NOT NULL
+  AND captured_length > 0 AND payload IS NOT NULL;
+----
+true
+
+query I
+SELECT count(*) > 30000 FROM read_pqcap_packets('test/data/curl-packets-syscalls-2016-05-04.pcapng');
+----
+true
+
+query I
+SELECT count(*) > 0 FROM 'test/data/curl-packets-syscalls-2016-05-04.pcapng';
+----
+true
+
+query I
+SELECT count(*) > 30000 FROM read_pqcap_packets('test/data/curl-packets-syscalls-2016-05-04.pcapng')
+WHERE l4_protocol = 'TCP' AND (dst_port = 443 OR src_port = 443);
+----
+true
+
+query I
+SELECT count(*) > 10000 FROM read_pqcap_packets('test/data/curl-packets-syscalls-2016-05-04.pcapng')
+WHERE comment IS NOT NULL;
+----
+true
+
+query I
+SELECT count(*) FROM read_pqcap_packets('test/data/curl-packets-syscalls-2016-05-04.pcapng')
+WHERE interface_id = 0 AND data_link = 1 AND captured_length >= 54 AND orig_len >= 54;
+----
+37448
 
 statement ok
 COPY (
-  SELECT timestamp_micros, orig_len, payload, src_ip, src_port, dst_ip, dst_port, l4_protocol
+  SELECT timestamp_micros, interface_id, data_link, captured_length, orig_len, comment,
+         src_ip, src_port, dst_ip, dst_port, l4_protocol, payload
   FROM read_pqcap_packets('test/data/demo.pqcapng')
 ) TO '{TEST_DIR}/pqcap_writer_copy.pcapng' (FORMAT pcapng, mode 'pcapng');
 
@@ -76,11 +148,39 @@ true
 
 statement ok
 COPY (
-  SELECT timestamp_micros, orig_len, payload, src_ip, src_port, dst_ip, dst_port, l4_protocol
+  SELECT timestamp_micros, interface_id, data_link, captured_length, orig_len, comment,
+         src_ip, src_port, dst_ip, dst_port, l4_protocol, payload
   FROM read_pqcap_packets('test/data/demo.pqcapng')
-) TO '{TEST_DIR}/pqcap_writer_copy.pqcapng' (FORMAT pcapng, mode 'pqcap');
+) TO '{TEST_DIR}/embed_source.pcapng' (FORMAT pcapng, mode 'pcapng');
 
 query I
-SELECT count(*) > 0 FROM read_pqcap('{TEST_DIR}/pqcap_writer_copy.pqcapng');
+SELECT pqcap_embed_index('{TEST_DIR}/embed_source.pcapng');
+----
+1
+
+query I
+SELECT count(*) FROM read_pqcap_packets('{TEST_DIR}/embed_source.pcapng');
+----
+1
+
+query I
+SELECT length(pqcap_offset_size('{TEST_DIR}/embed_source.pcapng')) > 0;
+----
+true
+
+query I
+SELECT count(*) > 0 FROM read_pqcap('{TEST_DIR}/embed_source.pcapng');
+----
+true
+
+statement ok
+COPY (
+  SELECT timestamp_micros, interface_id, data_link, captured_length, orig_len, comment,
+         src_ip, src_port, dst_ip, dst_port, l4_protocol, payload
+  FROM read_pqcap_packets('test/data/demo.pqcapng')
+) TO '{TEST_DIR}/pqcap_writer_copy.pcapng' (FORMAT pcapng, mode 'pqcap');
+
+query I
+SELECT count(*) > 0 FROM read_pqcap('{TEST_DIR}/pqcap_writer_copy.pcapng');
 ----
 true
