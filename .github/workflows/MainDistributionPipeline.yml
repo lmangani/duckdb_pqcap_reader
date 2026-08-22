@@ -13,7 +13,7 @@ jobs:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
-      duckdb_version: v1.5.2
+      duckdb_version: v1.5.5
       ci_tools_version: v1.5-variegata
       extension_name: pqcap_reader
 
@@ -44,7 +44,7 @@ jobs:
     name: Tidy Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.5-variegata
     with:
-      duckdb_version: v1.5.2
+      duckdb_version: v1.5.5
       ci_tools_version: v1.5-variegata
       extension_name: pqcap_reader
       format_checks: 'tidy'
